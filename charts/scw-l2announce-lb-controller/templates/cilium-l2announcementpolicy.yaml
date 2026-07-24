@@ -18,6 +18,6 @@ spec:
   {{- end }}
   interfaces:
     {{- toYaml .Values.cilium.l2AnnouncementPolicy.interfaces | nindent 4 }}
-  externalIPs: true
+  externalIPs: false
   loadBalancerIPs: true
 {{- end }}
