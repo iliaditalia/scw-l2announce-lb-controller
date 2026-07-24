@@ -139,8 +139,13 @@ func (f *fakeIPAM) MoveIP(req *ipam.MoveIPRequest, _ ...scw.RequestOption) (*ipa
 
 func (f *fakeIPAM) ReleaseIP(req *ipam.ReleaseIPRequest, _ ...scw.RequestOption) error {
 	f.calls = append(f.calls, "ReleaseIP")
-	if _, ok := f.ips[req.IPID]; !ok {
+	ip, ok := f.ips[req.IPID]
+	if !ok {
 		return notFoundErr(req.IPID)
+	}
+	// The real API refuses to release an IP still attached to a resource.
+	if ip.Resource != nil {
+		return &scw.PreconditionFailedError{Precondition: "resource_still_in_use", HelpMessage: fmt.Sprintf("IP %s is attached to resource %s", req.IPID, ip.Resource.ID)}
 	}
 	delete(f.ips, req.IPID)
 	return nil

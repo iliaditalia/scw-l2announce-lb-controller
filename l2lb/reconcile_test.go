@@ -387,8 +387,9 @@ func TestDeletionReleasesManagedIP(t *testing.T) {
 	if err := f.c.syncService("default/vip"); err != nil {
 		t.Fatal(err)
 	}
-	if got := f.ipam.mutations(); !reflect.DeepEqual(got, []string{"ReleaseIP"}) {
-		t.Fatalf("expected ReleaseIP, got %v", got)
+	want := []string{"DetachIP:" + macNode1, "ReleaseIP"}
+	if got := f.ipam.mutations(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected %v, got %v", want, got)
 	}
 	if _, err := f.dyn.Resource(poolGVR).Get(context.Background(), "scw-ipam-default-vip", metav1.GetOptions{}); !apierrors.IsNotFound(err) {
 		t.Errorf("pool not deleted: %v", err)
@@ -396,6 +397,18 @@ func TestDeletionReleasesManagedIP(t *testing.T) {
 	svc := f.service(t)
 	if hasFinalizer(svc) {
 		t.Error("finalizer not removed")
+	}
+}
+
+func TestDeletionReleasesUnattachedManagedIP(t *testing.T) {
+	f := newFixture(t, testService(withFinalizer, withIPID("ip-a"), withDeletion))
+	f.seededIP("ip-a", "172.30.192.10", "", managedByTag) // not attached
+
+	if err := f.c.syncService("default/vip"); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.ipam.mutations(); !reflect.DeepEqual(got, []string{"ReleaseIP"}) {
+		t.Fatalf("expected ReleaseIP only, got %v", got)
 	}
 }
 
@@ -424,8 +437,9 @@ func TestOptOutCleansUp(t *testing.T) {
 	if err := f.sync(t, "default/vip"); err != nil {
 		t.Fatal(err)
 	}
-	if got := f.ipam.mutations(); !reflect.DeepEqual(got, []string{"ReleaseIP"}) {
-		t.Fatalf("expected ReleaseIP, got %v", got)
+	want := []string{"DetachIP:" + macNode1, "ReleaseIP"}
+	if got := f.ipam.mutations(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected %v, got %v", want, got)
 	}
 	svc := f.service(t)
 	if hasFinalizer(svc) {

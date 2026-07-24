@@ -223,6 +223,10 @@ func (c *Controller) releaseOrDetachIP(ipID string) error {
 	}
 
 	if slices.Contains(ip.Tags, managedByTag) {
+		// Scaleway refuses to release an IP still attached to a resource.
+		if err := c.detachCustom(ip); err != nil {
+			return err
+		}
 		if err := c.ipamAPI.ReleaseIP(&ipam.ReleaseIPRequest{IPID: ip.ID}); err != nil && !isNotFound(err) {
 			return fmt.Errorf("releasing IPAM IP %s: %w", ip.ID, err)
 		}
@@ -231,16 +235,22 @@ func (c *Controller) releaseOrDetachIP(ipID string) error {
 		return nil
 	}
 
-	if ip.Resource != nil && ip.Resource.Type == ipam.ResourceTypeCustom && ip.Resource.MacAddress != nil {
-		mac := *ip.Resource.MacAddress
-		if _, err := c.ipamAPI.DetachIP(&ipam.DetachIPRequest{
-			IPID:     ip.ID,
-			Resource: &ipam.CustomResource{MacAddress: mac},
-		}); err != nil && !isNotFound(err) {
-			return fmt.Errorf("detaching user-provided IPAM IP %s: %w", ip.ID, err)
-		}
-		metricMutations.WithLabelValues("detach").Inc()
-		klog.Infof("detached user-provided IPAM IP %s (%s) from MAC %s", ip.ID, ip.Address.IP, mac)
+	return c.detachCustom(ip)
+}
+
+// detachCustom detaches ip from its custom-resource MAC, if any.
+func (c *Controller) detachCustom(ip *ipam.IP) error {
+	if ip.Resource == nil || ip.Resource.Type != ipam.ResourceTypeCustom || ip.Resource.MacAddress == nil {
+		return nil
 	}
+	mac := *ip.Resource.MacAddress
+	if _, err := c.ipamAPI.DetachIP(&ipam.DetachIPRequest{
+		IPID:     ip.ID,
+		Resource: &ipam.CustomResource{MacAddress: mac},
+	}); err != nil && !isNotFound(err) {
+		return fmt.Errorf("detaching IPAM IP %s: %w", ip.ID, err)
+	}
+	metricMutations.WithLabelValues("detach").Inc()
+	klog.Infof("detached IPAM IP %s (%s) from MAC %s", ip.ID, ip.Address.IP, mac)
 	return nil
 }
