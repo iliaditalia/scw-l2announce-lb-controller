@@ -44,7 +44,8 @@ Per opted-in Service, the reconcile loop:
    `k8s.iliad.it/scw-ipam-cleanup` finalizer): deletes the pool, **releases**
    the IPAM IP if the controller booked it (recognized by the
    `managed-by=scw-l2announce-lb-controller` tag), or merely **detaches**
-   user-provided IPs.
+   user-provided IPs. Setting `k8s.iliad.it/scw-ipam-ip-externally-managed: "true"`
+   forces detach-only regardless of tags.
 
 ## Usage
 
@@ -59,6 +60,9 @@ metadata:
     k8s.iliad.it/scw-ipam: "enabled"
     # optional: use a pre-reserved IPAM IP instead of booking one
     # k8s.iliad.it/scw-ipam-ip-id: "11111111-2222-3333-4444-555555555555"
+    # optional: mark that IP as externally managed — only ever detached on
+    # cleanup, never released, even if it carries the controller's tags
+    # k8s.iliad.it/scw-ipam-ip-externally-managed: "true"
     # optional: override the controller-wide private network
     # k8s.iliad.it/scw-ipam-pn-id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 spec:
@@ -74,7 +78,8 @@ creates one by default. Only IPv4 is supported.
 Do not edit the `k8s.iliad.it/scw-ipam-ip-id` annotation or the
 `ipam.k8s.iliad.it/pool` label of a managed Service by hand. Note that opting
 out strips both; if you supplied your own IP ID, re-add the annotation when
-re-opting in.
+re-opting in — or set `k8s.iliad.it/scw-ipam-ip-externally-managed: "true"`, which
+keeps the IP ID annotation across opt-out (and requires the IP ID to be set).
 
 ## Configuration
 

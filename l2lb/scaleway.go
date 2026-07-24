@@ -129,6 +129,13 @@ func (c *Controller) ensureIP(svc *v1core.Service, pnID string) (ip *ipam.IP, bo
 		return ip, false, nil
 	}
 
+	if svc.Annotations[annotationIPExternallyManaged] == "true" {
+		// Booking would leak: an external IP is never released on cleanup.
+		c.recorder.Eventf(svc, v1core.EventTypeWarning, "IPAMIPExternallyManagedMisconfigured",
+			"%s is \"true\" but %s is not set; refusing to book an IP that could never be released", annotationIPExternallyManaged, annotationIPID)
+		return nil, false, fmt.Errorf("%s is \"true\" but %s is not set", annotationIPExternallyManaged, annotationIPID)
+	}
+
 	uidTag := serviceUIDTagPrefix + string(svc.UID)
 
 	// Adoption: a previous run may have booked an IP but crashed before
@@ -212,8 +219,9 @@ func (c *Controller) ensureAttachment(svc *v1core.Service, ip *ipam.IP, mac stri
 
 // releaseOrDetachIP is the cleanup counterpart of ensureIP/ensureAttachment:
 // controller-booked IPs (managed-by tag) are released; user-provided IPs are
-// only detached from their custom-resource MAC.
-func (c *Controller) releaseOrDetachIP(ipID string) error {
+// only detached from their custom-resource MAC. external (the user-set
+// annotation) forces detach-only regardless of tags.
+func (c *Controller) releaseOrDetachIP(ipID string, external bool) error {
 	ip, err := c.ipamAPI.GetIP(&ipam.GetIPRequest{IPID: ipID})
 	if err != nil {
 		if isNotFound(err) {
@@ -222,7 +230,7 @@ func (c *Controller) releaseOrDetachIP(ipID string) error {
 		return err
 	}
 
-	if slices.Contains(ip.Tags, managedByTag) {
+	if !external && slices.Contains(ip.Tags, managedByTag) {
 		// Scaleway refuses to release an IP still attached to a resource.
 		if err := c.detachCustom(ip); err != nil {
 			return err

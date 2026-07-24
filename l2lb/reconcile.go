@@ -158,8 +158,9 @@ func (c *Controller) cleanupService(ctx context.Context, svc *v1.Service) error 
 	if err := c.deletePool(ctx, svc); err != nil {
 		return err
 	}
+	external := svc.Annotations[annotationIPExternallyManaged] == "true"
 	if ipID := svc.Annotations[annotationIPID]; ipID != "" {
-		if err := c.releaseOrDetachIP(ipID); err != nil {
+		if err := c.releaseOrDetachIP(ipID, external); err != nil {
 			return err
 		}
 	}
@@ -168,7 +169,9 @@ func (c *Controller) cleanupService(ctx context.Context, svc *v1.Service) error 
 	return patchService(ctx, c.clientSet, svc, func(s *v1.Service) {
 		s.Finalizers = slices.DeleteFunc(s.Finalizers, func(f string) bool { return f == finalizerName })
 		if s.DeletionTimestamp == nil { // opt-out, not deletion
-			delete(s.Annotations, annotationIPID)
+			if !external { // external IP IDs are user config, keep them
+				delete(s.Annotations, annotationIPID)
+			}
 			delete(s.Labels, poolLabelKey)
 		}
 	})

@@ -52,6 +52,10 @@ const (
 	annotationIPID = "k8s.iliad.it/scw-ipam-ip-id"
 	// annotationPNID optionally overrides the controller-wide private network ID.
 	annotationPNID = "k8s.iliad.it/scw-ipam-pn-id"
+	// annotationIPExternallyManaged ("true", user-set only, never written by the
+	// controller) marks the annotated IP as externally managed: it is only
+	// ever detached on cleanup, never released, regardless of its tags.
+	annotationIPExternallyManaged = "k8s.iliad.it/scw-ipam-ip-externally-managed"
 
 	// finalizerName guards Scaleway-side cleanup on Service deletion.
 	finalizerName = "k8s.iliad.it/scw-ipam-cleanup"

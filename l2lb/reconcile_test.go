@@ -138,6 +138,7 @@ func withIPID(id string) func(*v1.Service) {
 	return func(s *v1.Service) { s.Annotations[annotationIPID] = id }
 }
 func withDeletion(svc *v1.Service) { now := metav1.Now(); svc.DeletionTimestamp = &now }
+func withExternal(svc *v1.Service) { svc.Annotations[annotationIPExternallyManaged] = "true" }
 func withoutOptIn(svc *v1.Service) { delete(svc.Annotations, annotationEnabled) }
 
 func testNode(name, serverID string) *v1.Node {
@@ -425,6 +426,54 @@ func TestDeletionDetachesUserProvidedIP(t *testing.T) {
 	}
 	if _, ok := f.ipam.ips["ip-user"]; !ok {
 		t.Error("user-provided IP was released")
+	}
+}
+
+func TestDeletionNeverReleasesExternalIP(t *testing.T) {
+	// Adversarial case: the user-provided IP carries the managed-by tag
+	// (e.g. it was once booked by the controller for another service).
+	f := newFixture(t, testService(withFinalizer, withIPID("ip-ext"), withExternal, withDeletion))
+	f.seededIP("ip-ext", "172.30.192.50", macNode1, managedByTag)
+
+	if err := f.c.syncService("default/vip"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"DetachIP:" + macNode1}
+	if got := f.ipam.mutations(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected %v (detach only, never release), got %v", want, got)
+	}
+	if _, ok := f.ipam.ips["ip-ext"]; !ok {
+		t.Error("external IP was released")
+	}
+}
+
+func TestExternalWithoutIPIDErrors(t *testing.T) {
+	f := newFixture(t, testService(withExternal))
+
+	if err := f.sync(t, "default/vip"); err == nil {
+		t.Fatal("expected error for external annotation without IP ID")
+	}
+	if got := f.ipam.mutations(); len(got) != 0 {
+		t.Fatalf("expected no mutations, got %v", got)
+	}
+}
+
+func TestOptOutKeepsExternalAnnotations(t *testing.T) {
+	f := newFixture(t, testService(withoutOptIn, withFinalizer, withIPID("ip-ext"), withExternal))
+	f.seededIP("ip-ext", "172.30.192.50", macNode1)
+
+	if err := f.sync(t, "default/vip"); err != nil {
+		t.Fatal(err)
+	}
+	svc := f.service(t)
+	if hasFinalizer(svc) {
+		t.Error("finalizer not removed")
+	}
+	if svc.Annotations[annotationIPID] != "ip-ext" {
+		t.Error("user's IP ID annotation was stripped on opt-out")
+	}
+	if svc.Annotations[annotationIPExternallyManaged] != "true" {
+		t.Error("external annotation was stripped on opt-out")
 	}
 }
 
