@@ -1,0 +1,17 @@
+{{- if .Values.cilium.kapsuleBootstrap.enabled }}
+---
+# Enables L2 announcements without editing Kapsule's managed cilium-config
+# ConfigMap: merged over it by the agent's build-config init container at pod
+# start; CiliumNodeConfig keys take precedence.
+apiVersion: cilium.io/v2
+kind: CiliumNodeConfig
+metadata:
+  name: {{ include "l2lb.fullname" . }}-enable-l2-announcements
+  namespace: {{ .Values.cilium.namespace }}
+  labels:
+    {{- include "l2lb.labels" . | nindent 4 }}
+spec:
+  nodeSelector: {} # empty selector = all nodes
+  defaults:
+    enable-l2-announcements: "true"
+{{- end }}

@@ -1,0 +1,115 @@
+# Scaleway private network ID the VIPs are booked from. Required.
+pnID: ""
+
+# Full drift-resync interval (Go duration, e.g. "10m").
+# Empty uses the controller default.
+resyncPeriod: ""
+
+# Extra arguments appended to the controller command line.
+extraArgs: []
+
+# Scaleway API credentials, exposed to the controller as SCW_* environment
+# variables. Either point existingSecret at a Secret that carries
+# SCW_ACCESS_KEY, SCW_SECRET_KEY, SCW_DEFAULT_PROJECT_ID and
+# SCW_DEFAULT_REGION, or set the four values inline to have the chart render
+# that Secret.
+scaleway:
+  existingSecret: ""
+  accessKey: ""
+  secretKey: ""
+  projectID: ""
+  region: ""
+
+image:
+  repository: ghcr.io/iliaditalia/scw-l2announce-lb-controller
+  # Images are tagged with the git commit SHA; there is no moving tag.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# Two replicas + leader election: a standby takes over within the lease
+# timeout (15s) when the leader's node dies. Leader election is enabled
+# automatically whenever replicaCount > 1. Replicas are spread across nodes
+# by default (see topologySpreadConstraints).
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 128Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+# Empty renders a default constraint spreading replicas across
+# kubernetes.io/hostname (ScheduleAnyway), so a node failure leaves a
+# standby alive.
+topologySpreadConstraints: []
+priorityClassName: ""
+
+podDisruptionBudget:
+  # Rendered only when replicaCount > 1.
+  enabled: true
+  maxUnavailable: 1
+
+metrics:
+  service:
+    enabled: true
+    annotations: {}
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    labels: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  runAsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# Cilium L2-announcement enablement. Stock Scaleway Kapsule ships a managed
+# Cilium without L2 announcements: no announcement policy, the feature flag
+# off, and no lease RBAC for the cilium ServiceAccount. The chart creates all
+# three by default.
+cilium:
+  # Namespace of the Cilium installation.
+  namespace: kube-system
+  l2AnnouncementPolicy:
+    enabled: true
+    # Interface regexes the VIPs are announced on (Kapsule private-network
+    # NICs are ensX, usually ens6).
+    interfaces:
+      - "^ens[0-9]+$"
+    nodeSelector:
+      matchExpressions:
+        - key: node-role.kubernetes.io/control-plane
+          operator: DoesNotExist
+    # Which Services the policy announces; empty selects all.
+    serviceSelector: {}
+  kapsuleBootstrap:
+    # CiliumNodeConfig turning enable-l2-announcements on for all nodes, plus
+    # the lease Role/RoleBinding the upstream Cilium chart would create with
+    # l2announcements.enabled=true. Disable if your Cilium already has L2
+    # announcements properly enabled.
+    enabled: true
+
+nameOverride: ""
+fullnameOverride: ""

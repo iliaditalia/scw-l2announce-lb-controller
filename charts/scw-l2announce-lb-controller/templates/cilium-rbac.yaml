@@ -1,0 +1,33 @@
+{{- if .Values.cilium.kapsuleBootstrap.enabled }}
+---
+# Same rules the upstream Cilium Helm chart creates when
+# l2announcements.enabled=true. Needed because Kapsule's managed Cilium has no
+# lease RBAC for the L2 announcer.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "l2lb.fullname" . }}-cilium-l2announce-leases
+  namespace: {{ .Values.cilium.namespace }}
+  labels:
+    {{- include "l2lb.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [create, get, update, list, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "l2lb.fullname" . }}-cilium-l2announce-leases
+  namespace: {{ .Values.cilium.namespace }}
+  labels:
+    {{- include "l2lb.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "l2lb.fullname" . }}-cilium-l2announce-leases
+subjects:
+  - kind: ServiceAccount
+    name: cilium
+    namespace: {{ .Values.cilium.namespace }}
+{{- end }}

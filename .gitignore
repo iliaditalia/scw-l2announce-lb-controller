@@ -1,0 +1,15 @@
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+go.work.sum
+.env
+.idea/
+.vscode/
+.claude/
+
+scw-l2announce-lb-controller

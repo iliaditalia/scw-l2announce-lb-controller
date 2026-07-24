@@ -1,0 +1,12 @@
+apiVersion: v2
+name: scw-l2announce-lb-controller
+description: >-
+  Makes Cilium L2-announced LoadBalancer VIPs on Scaleway reachable through the
+  VPC gateway (peering/interlink) by keeping the Scaleway IPAM IP's MAC
+  attachment pointed at the current L2-announcement lease-holder node.
+type: application
+version: 0.1.0
+# Images are tagged with the git commit SHA; set image.tag explicitly.
+appVersion: latest
+sources:
+  - https://gitlab.local.iliad.it/devops/tools/scw-l2announce-lb-controller

@@ -1,0 +1,285 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "scw-l2announce-lb-controller values",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "global": {
+      "description": "Values shared with parent/sibling charts when this chart is used as a dependency. Not used by this chart.",
+      "type": "object"
+    },
+    "pnID": {
+      "description": "Scaleway private network ID the VIPs are booked from. Required.",
+      "type": "string"
+    },
+    "resyncPeriod": {
+      "description": "Full drift-resync interval as a Go duration (e.g. \"10m\"). Empty uses the controller default.",
+      "type": "string"
+    },
+    "extraArgs": {
+      "description": "Extra arguments appended to the controller command line.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "scaleway": { "$ref": "#/definitions/Scaleway" },
+    "image": { "$ref": "#/definitions/Image" },
+    "imagePullSecrets": {
+      "description": "Pod imagePullSecrets (list of {name: ...} references).",
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "replicaCount": {
+      "description": "Number of controller replicas. Run at least 2 (spread across nodes) in production; leader election is enabled automatically whenever this is > 1.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "resources": { "$ref": "#/definitions/Resources" },
+    "nodeSelector": {
+      "description": "Pod nodeSelector.",
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "tolerations": {
+      "description": "Pod tolerations (Kubernetes Toleration objects, passed through).",
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "affinity": {
+      "description": "Pod affinity (Kubernetes Affinity object, passed through).",
+      "type": "object"
+    },
+    "topologySpreadConstraints": {
+      "description": "Pod topologySpreadConstraints (passed through). Empty renders a default constraint spreading replicas across kubernetes.io/hostname.",
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "priorityClassName": {
+      "description": "Pod priorityClassName.",
+      "type": "string"
+    },
+    "podDisruptionBudget": { "$ref": "#/definitions/PodDisruptionBudget" },
+    "metrics": { "$ref": "#/definitions/Metrics" },
+    "serviceAccount": { "$ref": "#/definitions/ServiceAccount" },
+    "podAnnotations": {
+      "description": "Extra annotations for the controller pods.",
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "podLabels": {
+      "description": "Extra labels for the controller pods.",
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "podSecurityContext": {
+      "description": "Pod-level securityContext (Kubernetes PodSecurityContext, passed through).",
+      "type": "object"
+    },
+    "securityContext": {
+      "description": "Container-level securityContext (Kubernetes SecurityContext, passed through).",
+      "type": "object"
+    },
+    "cilium": { "$ref": "#/definitions/Cilium" },
+    "nameOverride": {
+      "description": "Override the chart name used in resource names and labels.",
+      "type": "string"
+    },
+    "fullnameOverride": {
+      "description": "Override the fully qualified resource name prefix.",
+      "type": "string"
+    }
+  },
+  "definitions": {
+    "Scaleway": {
+      "description": "Scaleway API credentials, exposed to the controller as SCW_* environment variables. Set existingSecret, or all four inline values to have the chart render the Secret.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "existingSecret": {
+          "description": "Name of an existing Secret carrying SCW_ACCESS_KEY, SCW_SECRET_KEY, SCW_DEFAULT_PROJECT_ID and SCW_DEFAULT_REGION. Takes precedence over the inline values.",
+          "type": "string"
+        },
+        "accessKey": {
+          "description": "Scaleway access key (IPAM read/write + Instance read). Ignored when existingSecret is set.",
+          "type": "string"
+        },
+        "secretKey": {
+          "description": "Scaleway secret key. Ignored when existingSecret is set.",
+          "type": "string"
+        },
+        "projectID": {
+          "description": "Scaleway project the IPAM IPs are booked in. Ignored when existingSecret is set.",
+          "type": "string"
+        },
+        "region": {
+          "description": "Region of the IPAM IPs, e.g. fr-par. Ignored when existingSecret is set.",
+          "type": "string"
+        }
+      }
+    },
+    "Image": {
+      "description": "Controller container image.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "description": "Image repository.",
+          "type": "string"
+        },
+        "tag": {
+          "description": "Image tag. Images are tagged with the git commit SHA; there is no moving tag.",
+          "type": "string"
+        },
+        "pullPolicy": {
+          "description": "Image pull policy.",
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"]
+        }
+      }
+    },
+    "Resources": {
+      "description": "Container resource requests and limits.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requests": {
+          "description": "Resource requests (quantity per resource name).",
+          "type": "object",
+          "additionalProperties": { "type": ["string", "number"] }
+        },
+        "limits": {
+          "description": "Resource limits (quantity per resource name).",
+          "type": "object",
+          "additionalProperties": { "type": ["string", "number"] }
+        }
+      }
+    },
+    "PodDisruptionBudget": {
+      "description": "PodDisruptionBudget for the controller. Only rendered when replicaCount > 1.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "description": "Create the PodDisruptionBudget.",
+          "type": "boolean"
+        },
+        "maxUnavailable": {
+          "description": "Maximum unavailable replicas (integer or percentage string).",
+          "type": ["integer", "string"]
+        }
+      }
+    },
+    "Metrics": {
+      "description": "Metrics exposure.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "service": { "$ref": "#/definitions/MetricsService" },
+        "serviceMonitor": { "$ref": "#/definitions/ServiceMonitor" }
+      }
+    },
+    "MetricsService": {
+      "description": "ClusterIP Service in front of the /metrics endpoints.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "description": "Create the metrics Service.",
+          "type": "boolean"
+        },
+        "annotations": {
+          "description": "Extra annotations for the metrics Service.",
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "ServiceMonitor": {
+      "description": "Prometheus Operator ServiceMonitor scraping all replicas.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "description": "Create the ServiceMonitor (requires the Prometheus Operator CRDs).",
+          "type": "boolean"
+        },
+        "interval": {
+          "description": "Scrape interval.",
+          "type": "string"
+        },
+        "labels": {
+          "description": "Extra labels for the ServiceMonitor (e.g. to match a Prometheus serviceMonitorSelector).",
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "ServiceAccount": {
+      "description": "ServiceAccount the controller runs as.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create": {
+          "description": "Create the ServiceAccount.",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "ServiceAccount name. Empty derives it from the chart fullname (or uses \"default\" when create is false).",
+          "type": "string"
+        },
+        "annotations": {
+          "description": "Extra annotations for the ServiceAccount.",
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "Cilium": {
+      "description": "Cilium L2-announcement enablement for clusters (like stock Scaleway Kapsule) where it is not configured.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "namespace": {
+          "description": "Namespace of the Cilium installation.",
+          "type": "string"
+        },
+        "l2AnnouncementPolicy": { "$ref": "#/definitions/CiliumL2AnnouncementPolicy" },
+        "kapsuleBootstrap": { "$ref": "#/definitions/KapsuleBootstrap" }
+      }
+    },
+    "CiliumL2AnnouncementPolicy": {
+      "description": "CiliumL2AnnouncementPolicy making Cilium answer ARP for the VIPs.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "description": "Create the CiliumL2AnnouncementPolicy.",
+          "type": "boolean"
+        },
+        "interfaces": {
+          "description": "Regexes of the interfaces the VIPs are announced on (Kapsule private-network NICs are ensX).",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "nodeSelector": {
+          "description": "Nodes announcing the VIPs (Kubernetes LabelSelector, passed through).",
+          "type": "object"
+        },
+        "serviceSelector": {
+          "description": "Services the policy announces (Kubernetes LabelSelector, passed through). Empty selects all.",
+          "type": "object"
+        }
+      }
+    },
+    "KapsuleBootstrap": {
+      "description": "Kapsule-specific enablement: CiliumNodeConfig turning enable-l2-announcements on for all nodes, plus the lease RBAC for the cilium ServiceAccount that the upstream Cilium chart would create with l2announcements.enabled=true.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "description": "Create the CiliumNodeConfig and the cilium lease Role/RoleBinding. Disable if your Cilium already has L2 announcements properly enabled.",
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

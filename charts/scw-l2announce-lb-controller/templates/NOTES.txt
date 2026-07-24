@@ -1,0 +1,21 @@
+{{ .Chart.Name }} deployed ({{ .Values.replicaCount }} replica(s), leader election {{ if gt (int .Values.replicaCount) 1 }}on{{ else }}off{{ end }}).
+
+Opt a Service in:
+
+  apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      k8s.iliad.it/scw-ipam: "enabled"
+  spec:
+    type: LoadBalancer
+    loadBalancerClass: io.cilium/l2-announcer
+
+Metrics: :8080/metrics on each replica{{ if .Values.metrics.service.enabled }} (Service {{ include "l2lb.fullname" . }}){{ end }}.
+{{- if .Values.cilium.kapsuleBootstrap.enabled }}
+
+Cilium agents only apply the CiliumNodeConfig enabling L2 announcements at pod
+start. After the FIRST install on a stock Kapsule cluster, restart them once:
+
+  kubectl -n {{ .Values.cilium.namespace }} rollout restart daemonset/cilium
+{{- end }}

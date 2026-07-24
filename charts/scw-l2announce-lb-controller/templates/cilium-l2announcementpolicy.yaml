@@ -1,0 +1,23 @@
+{{- if .Values.cilium.l2AnnouncementPolicy.enabled }}
+---
+# Makes Cilium answer ARP for LoadBalancer VIPs on the private-network NICs.
+apiVersion: cilium.io/v2alpha1
+kind: CiliumL2AnnouncementPolicy
+metadata:
+  name: {{ include "l2lb.fullname" . }}
+  labels:
+    {{- include "l2lb.labels" . | nindent 4 }}
+spec:
+  {{- with .Values.cilium.l2AnnouncementPolicy.nodeSelector }}
+  nodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.cilium.l2AnnouncementPolicy.serviceSelector }}
+  serviceSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  interfaces:
+    {{- toYaml .Values.cilium.l2AnnouncementPolicy.interfaces | nindent 4 }}
+  externalIPs: true
+  loadBalancerIPs: true
+{{- end }}
