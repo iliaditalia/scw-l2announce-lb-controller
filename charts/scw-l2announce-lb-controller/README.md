@@ -32,7 +32,9 @@ kubectl -n scw-l2lb create secret generic scw-credentials \
   --from-literal=SCW_DEFAULT_REGION=fr-par
 ```
 
-Released versions are published to GHCR as an OCI chart:
+Released versions are published to GHCR as an OCI chart — available versions
+and their per-version values documentation are listed on the
+[GitHub Releases page](https://github.com/iliaditalia/scw-l2announce-lb-controller/releases):
 
 ```sh
 helm install l2lb oci://ghcr.io/iliaditalia/charts/scw-l2announce-lb-controller \

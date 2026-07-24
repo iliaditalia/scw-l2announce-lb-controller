@@ -1,6 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "scw-l2announce-lb-controller values",
+  "description": "Values for the scw-l2announce-lb-controller Helm chart: the controller Deployment plus, by default, the Cilium L2-announcement bootstrap for stock Scaleway Kapsule clusters.",
   "type": "object",
   "additionalProperties": false,
   "properties": {

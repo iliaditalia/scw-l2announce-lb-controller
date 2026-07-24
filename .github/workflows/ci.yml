@@ -90,14 +90,42 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  # Runs third-party PyPI code, so it is isolated in an unprivileged job:
+  # no token permissions, no persisted git credentials. The privileged chart
+  # job only consumes the resulting artifact.
+  docs:
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Generate release notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          sed "s/\${VERSION}/${VERSION}/g" .github/release-notes-preamble.md > body.md
+          pipx run jsonschema-markdown==2026.5.0 --no-footer \
+            charts/scw-l2announce-lb-controller/values.schema.json >> body.md
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: body.md
+
   chart:
     if: github.ref_type == 'tag'
     # The published chart's default image.tag points at this release's image,
     # so the image must exist first.
-    needs: image
+    needs: [image, docs]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-notes
       - name: Package and push chart
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
@@ -107,3 +135,11 @@ jobs:
             helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
           helm push "scw-l2announce-lb-controller-${VERSION}.tgz" \
             "oci://ghcr.io/${{ github.repository_owner }}/charts"
+      - name: Create GitHub release with values docs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" --verify-tag \
+            --title "$GITHUB_REF_NAME" --notes-file body.md \
+            "scw-l2announce-lb-controller-${VERSION}.tgz"

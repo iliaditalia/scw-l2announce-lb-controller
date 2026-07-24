@@ -154,7 +154,8 @@ A generic Helm chart lives in
 [`charts/scw-l2announce-lb-controller`](charts/scw-l2announce-lb-controller).
 On a stock Kapsule cluster it also bootstraps Cilium L2 announcements
 (announcement policy, `enable-l2-announcements` CiliumNodeConfig, cilium lease
-RBAC):
+RBAC). Available versions and their values documentation are listed on the
+[GitHub Releases page](https://github.com/iliaditalia/scw-l2announce-lb-controller/releases):
 
 ```sh
 helm install l2lb oci://ghcr.io/iliaditalia/charts/scw-l2announce-lb-controller \
@@ -166,6 +167,8 @@ helm install l2lb oci://ghcr.io/iliaditalia/charts/scw-l2announce-lb-controller 
 
 (For development, install from `./charts/scw-l2announce-lb-controller` with an
 explicit `image.tag` instead.) Releases are cut by pushing a `vX.Y.Z` git tag:
-CI publishes the multi-arch image `ghcr.io/iliaditalia/scw-l2announce-lb-controller:X.Y.Z`
-and the chart at the same version; every push to `main` additionally publishes
-the image tagged with the commit SHA and `latest`.
+CI publishes the multi-arch image `ghcr.io/iliaditalia/scw-l2announce-lb-controller:X.Y.Z`,
+the chart at the same version, and a GitHub Release whose description carries
+the values documentation generated from that version's `values.schema.json`;
+every push to `main` additionally publishes the image tagged with the commit
+SHA and `latest`.

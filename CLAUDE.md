@@ -70,7 +70,15 @@ commit SHA + `latest` on main, semver on `v*` tags; on `v*` tags, `chart`
 packages with `version` = `appVersion` = the tag (so the chart's default
 `image.tag` matches the released image) and pushes to
 `oci://ghcr.io/iliaditalia/charts` (the `charts/` prefix avoids colliding
-with the image package). The Dockerfile builds `FROM
+with the image package). The tag job also creates a GitHub Release: body =
+`.github/release-notes-preamble.md` (`${VERSION}` substituted) + values docs
+generated from `values.schema.json` by a version-pinned
+`pipx run jsonschema-markdown` — which runs in the separate unprivileged
+`docs` job (`permissions: {}`, `persist-credentials: false`) because it
+executes third-party PyPI code; the privileged `chart` job only downloads the
+artifact and attaches the chart .tgz. The Releases page is the versioned
+chart-docs listing, since GHCR can't render a per-version README. Never move
+third-party code execution into a job holding write tokens. The Dockerfile builds `FROM
 --platform=$BUILDPLATFORM` and cross-compiles via declared
 `ARG TARGETOS TARGETARCH` — keep it that way, qemu-compiled Go is slow.
 
