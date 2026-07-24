@@ -85,6 +85,10 @@ with the image package). The Dockerfile builds `FROM
   Keep values.yaml, the schema, and the chart README in sync.
 - **`leaderElect` is not a value**: derived everywhere as
   `gt (int .Values.replicaCount) 1` (flag, election Role, NOTES).
+- **Credentials are never chart values**: `scaleway.existingSecret` (required)
+  carries the `SCW_*` env vars; only the non-secret `scaleway.projectID`/
+  `region` may be values (rendered into a ConfigMap that takes precedence
+  over the Secret). `scaleway.pnID` lives under `scaleway`, not top-level.
 - Every template body starts with a `---` document marker **inside** its
   `{{- if }}` gate.
 - The chart also bootstraps Cilium L2 announcement for stock Kapsule
@@ -100,9 +104,9 @@ Validate chart changes:
 ```sh
 helm lint charts/scw-l2announce-lb-controller
 helm template t charts/scw-l2announce-lb-controller \
-  --set pnID=pn-x --set scaleway.existingSecret=s        # must render
-helm template t charts/scw-l2announce-lb-controller      # must fail (required values)
+  --set scaleway.pnID=pn-x --set scaleway.existingSecret=s   # must render
+helm template t charts/scw-l2announce-lb-controller          # must fail (required values)
 helm template t charts/scw-l2announce-lb-controller \
-  --set pnID=pn-x --set scaleway.existingSecret=s \
-  --set typoKey=1                                        # must fail (strict schema)
+  --set scaleway.pnID=pn-x --set scaleway.existingSecret=s \
+  --set typoKey=1                                            # must fail (strict schema)
 ```

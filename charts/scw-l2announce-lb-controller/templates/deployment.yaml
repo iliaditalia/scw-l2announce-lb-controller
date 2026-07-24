@@ -39,7 +39,7 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
-            - -private-network-id={{ required "pnID is required: the Scaleway private network ID the VIPs are booked from" .Values.pnID }}
+            - -private-network-id={{ required "scaleway.pnID is required: the Scaleway private network ID the VIPs are booked from" .Values.scaleway.pnID }}
             - -leader-elect={{ gt (int .Values.replicaCount) 1 }}
             {{- with .Values.resyncPeriod }}
             - -resync-period={{ . }}
@@ -54,7 +54,11 @@ spec:
                   fieldPath: metadata.namespace
           envFrom:
             - secretRef:
-                name: {{ include "l2lb.secretName" . }}
+                name: {{ required "scaleway.existingSecret is required: a Secret with SCW_ACCESS_KEY and SCW_SECRET_KEY (plus SCW_DEFAULT_PROJECT_ID/SCW_DEFAULT_REGION unless scaleway.projectID/region are set)" .Values.scaleway.existingSecret }}
+            {{- if or .Values.scaleway.projectID .Values.scaleway.region }}
+            - configMapRef:
+                name: {{ include "l2lb.fullname" . }}
+            {{- end }}
           ports:
             - name: metrics
               containerPort: 8080

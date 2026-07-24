@@ -1,0 +1,17 @@
+{{- if or .Values.scaleway.projectID .Values.scaleway.region }}
+---
+# Non-secret Scaleway settings; take precedence over the credentials Secret.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "l2lb.fullname" . }}
+  labels:
+    {{- include "l2lb.labels" . | nindent 4 }}
+data:
+  {{- with .Values.scaleway.projectID }}
+  SCW_DEFAULT_PROJECT_ID: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.scaleway.region }}
+  SCW_DEFAULT_REGION: {{ . | quote }}
+  {{- end }}
+{{- end }}

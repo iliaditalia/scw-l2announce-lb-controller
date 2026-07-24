@@ -17,17 +17,29 @@ Requires Cilium ≥ 1.18 (`cilium.io/v2` IP pools).
 
 ## Install
 
+First create the credentials Secret. Its keys are the `SCW_*` environment
+variables read by the controller — `SCW_ACCESS_KEY` and `SCW_SECRET_KEY` are
+always required; `SCW_DEFAULT_PROJECT_ID` and `SCW_DEFAULT_REGION` are not
+secret and can live either here or in the chart values (`scaleway.projectID` /
+`scaleway.region`, which are rendered into a ConfigMap and take precedence
+over the Secret):
+
+```sh
+kubectl -n scw-l2lb create secret generic scw-credentials \
+  --from-literal=SCW_ACCESS_KEY=<access-key> \
+  --from-literal=SCW_SECRET_KEY=<secret-key> \
+  --from-literal=SCW_DEFAULT_PROJECT_ID=<project-uuid> \
+  --from-literal=SCW_DEFAULT_REGION=fr-par
+```
+
 Released versions are published to GHCR as an OCI chart:
 
 ```sh
 helm install l2lb oci://ghcr.io/iliaditalia/charts/scw-l2announce-lb-controller \
   --version <X.Y.Z> \
   --namespace scw-l2lb --create-namespace \
-  --set pnID=<private-network-uuid> \
-  --set scaleway.existingSecret=<secret-with-SCW_-vars>
-# or inline credentials instead of existingSecret:
-#  --set scaleway.accessKey=... --set scaleway.secretKey=... \
-#  --set scaleway.projectID=... --set scaleway.region=fr-par
+  --set scaleway.existingSecret=scw-credentials \
+  --set scaleway.pnID=<private-network-uuid>
 ```
 
 For development, install from the repo checkout instead:
@@ -52,9 +64,9 @@ unknown keys fail `helm template`). The essentials:
 
 | Key | Default | Purpose |
 |---|---|---|
-| `pnID` | — (required) | Scaleway private network the VIPs are booked from |
-| `scaleway.existingSecret` | `""` | Secret with `SCW_ACCESS_KEY`, `SCW_SECRET_KEY`, `SCW_DEFAULT_PROJECT_ID`, `SCW_DEFAULT_REGION` |
-| `scaleway.accessKey/secretKey/projectID/region` | `""` | Inline alternative: the chart renders the Secret |
+| `scaleway.existingSecret` | — (required) | Secret with `SCW_ACCESS_KEY` + `SCW_SECRET_KEY` (and project/region unless set below) |
+| `scaleway.pnID` | — (required) | Scaleway private network the VIPs are booked from |
+| `scaleway.projectID` / `scaleway.region` | `""` (from Secret) | Non-secret settings; rendered into a ConfigMap, take precedence over the Secret |
 | `image.repository` | `ghcr.io/iliaditalia/scw-l2announce-lb-controller` | Controller image |
 | `image.tag` | `Chart.appVersion` | Released charts pin this to the release version; set a commit SHA for unreleased builds |
 | `replicaCount` | `2` | HA: standby takes over within the 15s lease timeout. Leader election is on automatically whenever > 1 |

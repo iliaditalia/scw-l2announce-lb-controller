@@ -8,10 +8,6 @@
       "description": "Values shared with parent/sibling charts when this chart is used as a dependency. Not used by this chart.",
       "type": "object"
     },
-    "pnID": {
-      "description": "Scaleway private network ID the VIPs are booked from. Required.",
-      "type": "string"
-    },
     "resyncPeriod": {
       "description": "Full drift-resync interval as a Go duration (e.g. \"10m\"). Empty uses the controller default.",
       "type": "string"
@@ -90,28 +86,24 @@
   },
   "definitions": {
     "Scaleway": {
-      "description": "Scaleway API credentials, exposed to the controller as SCW_* environment variables. Set existingSecret, or all four inline values to have the chart render the Secret.",
+      "description": "Scaleway configuration. Credentials are never set in values: they come from existingSecret.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "existingSecret": {
-          "description": "Name of an existing Secret carrying SCW_ACCESS_KEY, SCW_SECRET_KEY, SCW_DEFAULT_PROJECT_ID and SCW_DEFAULT_REGION. Takes precedence over the inline values.",
+          "description": "Required. Name of an existing Secret whose keys are the SCW_* environment variables: SCW_ACCESS_KEY and SCW_SECRET_KEY (always), plus SCW_DEFAULT_PROJECT_ID and SCW_DEFAULT_REGION unless projectID/region are set in values.",
           "type": "string"
         },
-        "accessKey": {
-          "description": "Scaleway access key (IPAM read/write + Instance read). Ignored when existingSecret is set.",
-          "type": "string"
-        },
-        "secretKey": {
-          "description": "Scaleway secret key. Ignored when existingSecret is set.",
+        "pnID": {
+          "description": "Required. Scaleway private network ID the VIPs are booked from.",
           "type": "string"
         },
         "projectID": {
-          "description": "Scaleway project the IPAM IPs are booked in. Ignored when existingSecret is set.",
+          "description": "Project the IPAM IPs are booked in. Not secret: rendered into a ConfigMap and takes precedence over the Secret. Empty: must be in the Secret (SCW_DEFAULT_PROJECT_ID).",
           "type": "string"
         },
         "region": {
-          "description": "Region of the IPAM IPs, e.g. fr-par. Ignored when existingSecret is set.",
+          "description": "Region of the IPAM IPs, e.g. fr-par. Not secret: rendered into a ConfigMap and takes precedence over the Secret. Empty: must be in the Secret (SCW_DEFAULT_REGION).",
           "type": "string"
         }
       }

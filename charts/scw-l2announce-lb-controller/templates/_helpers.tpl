@@ -34,7 +34,3 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
-
-{{- define "l2lb.secretName" -}}
-{{- default (include "l2lb.fullname" .) .Values.scaleway.existingSecret }}
-{{- end }}

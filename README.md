@@ -160,8 +160,8 @@ RBAC):
 helm install l2lb oci://ghcr.io/iliaditalia/charts/scw-l2announce-lb-controller \
   --version <X.Y.Z> \
   --namespace scw-l2lb --create-namespace \
-  --set pnID=<private-network-uuid> \
-  --set scaleway.existingSecret=<secret-with-SCW_-vars>
+  --set scaleway.existingSecret=<secret-with-SCW_-vars> \
+  --set scaleway.pnID=<private-network-uuid>
 ```
 
 (For development, install from `./charts/scw-l2announce-lb-controller` with an

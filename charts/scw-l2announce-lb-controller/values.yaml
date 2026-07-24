@@ -1,6 +1,3 @@
-# Scaleway private network ID the VIPs are booked from. Required.
-pnID: ""
-
 # Full drift-resync interval (Go duration, e.g. "10m").
 # Empty uses the controller default.
 resyncPeriod: ""
@@ -8,16 +5,23 @@ resyncPeriod: ""
 # Extra arguments appended to the controller command line.
 extraArgs: []
 
-# Scaleway API credentials, exposed to the controller as SCW_* environment
-# variables. Either point existingSecret at a Secret that carries
-# SCW_ACCESS_KEY, SCW_SECRET_KEY, SCW_DEFAULT_PROJECT_ID and
-# SCW_DEFAULT_REGION, or set the four values inline to have the chart render
-# that Secret.
+# Scaleway configuration. Credentials are never set in values: existingSecret
+# (required) names a Secret whose keys are the SCW_* environment variables:
+#   SCW_ACCESS_KEY          API access key (IPAM read/write + Instance read)
+#   SCW_SECRET_KEY          API secret key
+#   SCW_DEFAULT_PROJECT_ID  project the IPAM IPs are booked in (optional here)
+#   SCW_DEFAULT_REGION      region of the IPAM IPs, e.g. fr-par (optional here)
+# The last two are not secret: set projectID/region below instead if you
+# prefer — they are rendered into a ConfigMap and take precedence over the
+# Secret.
 scaleway:
+  # Name of the Secret described above. Required.
   existingSecret: ""
-  accessKey: ""
-  secretKey: ""
+  # Scaleway private network ID the VIPs are booked from. Required.
+  pnID: ""
+  # Project the IPAM IPs are booked in. If empty: it must be in the Secret.
   projectID: ""
+  # Region of the IPAM IPs, e.g. fr-par. If empty: it must be in the Secret.
   region: ""
 
 image:
