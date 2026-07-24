@@ -3,13 +3,8 @@ ARCH ?= $(shell go env GOARCH)
 
 BUILD_DATE ?= $(shell date -Is)
 
-REGISTRY ?= harbor-prod.ad.local.iliad.it/devops
-IMAGE ?= scw-l2announce-lb-controller
-FULL_IMAGE ?= $(REGISTRY)/$(IMAGE)
-
 SHA ?= $(shell git rev-parse HEAD)
 TAG ?= $(SHA)
-IMAGE_TAG ?= $(SHA)
 COMMIT_SHA ?= $(SHA)
 
 LDFLAGS := -X github.com/iliaditalia/scw-l2announce-lb-controller/l2lb.version=$(TAG) \
@@ -34,7 +29,3 @@ fmt:
 .PHONY: compile
 compile:
 	go build -v -ldflags "$(LDFLAGS)" -o scw-l2announce-lb-controller ./cmd/scw-l2announce-lb-controller
-
-.PHONY: docker-build
-docker-build:
-	docker build . --platform=linux/$(ARCH) --build-arg TAG=$(TAG) --build-arg COMMIT_SHA=$(COMMIT_SHA) --build-arg BUILD_DATE=$(BUILD_DATE) -f Dockerfile -t ${FULL_IMAGE}:${IMAGE_TAG}
