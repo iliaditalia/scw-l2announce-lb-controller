@@ -61,6 +61,19 @@ make compile   # binary; also run gofmt -l . and go vet ./...
 Known macOS quirks (pre-existing, harmless): `BUILD_DATE ?= $(shell date -Is)`
 fails on BSD date; version stamps read `git rev-parse HEAD`.
 
+## CI / releases
+
+`.github/workflows/ci.yml`: `test` (Go + gofmt + vet + the chart validation
+battery below) on every push/PR; on pushes, `image` builds multi-arch
+(amd64+arm64) to `ghcr.io/iliaditalia/scw-l2announce-lb-controller` — bare
+commit SHA + `latest` on main, semver on `v*` tags; on `v*` tags, `chart`
+packages with `version` = `appVersion` = the tag (so the chart's default
+`image.tag` matches the released image) and pushes to
+`oci://ghcr.io/iliaditalia/charts` (the `charts/` prefix avoids colliding
+with the image package). The Dockerfile builds `FROM
+--platform=$BUILDPLATFORM` and cross-compiles via declared
+`ARG TARGETOS TARGETARCH` — keep it that way, qemu-compiled Go is slow.
+
 ## Helm chart rules
 
 - `values.schema.json` is strict and follows the Iliad schema conventions:

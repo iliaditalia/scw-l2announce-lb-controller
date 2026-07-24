@@ -5,8 +5,9 @@ description: >-
   VPC gateway (peering/interlink) by keeping the Scaleway IPAM IP's MAC
   attachment pointed at the current L2-announcement lease-holder node.
 type: application
+# version and appVersion are overridden by CI at release time (git tag vX.Y.Z
+# → both X.Y.Z); the values below only apply to installs from a repo checkout.
 version: 0.1.0
-# Images are tagged with the git commit SHA; set image.tag explicitly.
 appVersion: latest
 sources:
   - https://github.com/iliaditalia/scw-l2announce-lb-controller

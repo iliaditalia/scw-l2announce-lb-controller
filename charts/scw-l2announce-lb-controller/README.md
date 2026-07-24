@@ -17,14 +17,23 @@ Requires Cilium ≥ 1.18 (`cilium.io/v2` IP pools).
 
 ## Install
 
+Released versions are published to GHCR as an OCI chart:
+
 ```sh
-helm install l2lb ./charts/scw-l2announce-lb-controller \
+helm install l2lb oci://ghcr.io/iliaditalia/charts/scw-l2announce-lb-controller \
+  --version <X.Y.Z> \
   --namespace scw-l2lb --create-namespace \
   --set pnID=<private-network-uuid> \
   --set scaleway.existingSecret=<secret-with-SCW_-vars>
 # or inline credentials instead of existingSecret:
 #  --set scaleway.accessKey=... --set scaleway.secretKey=... \
 #  --set scaleway.projectID=... --set scaleway.region=fr-par
+```
+
+For development, install from the repo checkout instead:
+
+```sh
+helm install l2lb ./charts/scw-l2announce-lb-controller --set image.tag=<commit-sha> ...
 ```
 
 On a stock Kapsule cluster, restart the Cilium agents once after the first
@@ -47,7 +56,7 @@ unknown keys fail `helm template`). The essentials:
 | `scaleway.existingSecret` | `""` | Secret with `SCW_ACCESS_KEY`, `SCW_SECRET_KEY`, `SCW_DEFAULT_PROJECT_ID`, `SCW_DEFAULT_REGION` |
 | `scaleway.accessKey/secretKey/projectID/region` | `""` | Inline alternative: the chart renders the Secret |
 | `image.repository` | `ghcr.io/iliaditalia/scw-l2announce-lb-controller` | Controller image |
-| `image.tag` | `Chart.appVersion` | Images are tagged by git commit SHA — set this |
+| `image.tag` | `Chart.appVersion` | Released charts pin this to the release version; set a commit SHA for unreleased builds |
 | `replicaCount` | `2` | HA: standby takes over within the 15s lease timeout. Leader election is on automatically whenever > 1 |
 | `resyncPeriod` | `""` (controller default) | Full drift-resync interval |
 | `cilium.l2AnnouncementPolicy.enabled` | `true` | Create the announcement policy |

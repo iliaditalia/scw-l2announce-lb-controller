@@ -157,8 +157,15 @@ On a stock Kapsule cluster it also bootstraps Cilium L2 announcements
 RBAC):
 
 ```sh
-helm install l2lb ./charts/scw-l2announce-lb-controller \
+helm install l2lb oci://ghcr.io/iliaditalia/charts/scw-l2announce-lb-controller \
+  --version <X.Y.Z> \
   --namespace scw-l2lb --create-namespace \
   --set pnID=<private-network-uuid> \
   --set scaleway.existingSecret=<secret-with-SCW_-vars>
 ```
+
+(For development, install from `./charts/scw-l2announce-lb-controller` with an
+explicit `image.tag` instead.) Releases are cut by pushing a `vX.Y.Z` git tag:
+CI publishes the multi-arch image `ghcr.io/iliaditalia/scw-l2announce-lb-controller:X.Y.Z`
+and the chart at the same version; every push to `main` additionally publishes
+the image tagged with the commit SHA and `latest`.

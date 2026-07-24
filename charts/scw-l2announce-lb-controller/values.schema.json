@@ -126,7 +126,7 @@
           "type": "string"
         },
         "tag": {
-          "description": "Image tag. Images are tagged with the git commit SHA; there is no moving tag.",
+          "description": "Image tag. Empty defaults to the chart appVersion, which released charts pin to the release version; set a commit SHA for unreleased builds.",
           "type": "string"
         },
         "pullPolicy": {

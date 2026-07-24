@@ -22,7 +22,8 @@ scaleway:
 
 image:
   repository: ghcr.io/iliaditalia/scw-l2announce-lb-controller
-  # Images are tagged with the git commit SHA; there is no moving tag.
+  # Empty defaults to the chart appVersion, which released charts pin to the
+  # release version. Set a commit SHA for unreleased builds.
   tag: ""
   pullPolicy: IfNotPresent
 
