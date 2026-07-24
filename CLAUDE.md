@@ -1,0 +1,95 @@
+# CLAUDE.md
+
+## What this is
+
+A **tech demo** (not production-recommended — warning at the top of README.md
+stays) published **publicly on GitHub**. Single-purpose Kubernetes operator for
+Scaleway Kapsule: keeps a Scaleway IPAM IP's custom-resource MAC attachment
+pointed at the node holding the Cilium L2-announcement lease, so
+Cilium-announced LoadBalancer VIPs are routable through the VPC gateway
+(peering/interlink), not just on the local L2 segment. IPv4 only. README.md
+has the full why/how; its RBAC section is the source of truth the Helm chart
+must stay in sync with.
+
+## Layout
+
+- `cmd/scw-l2announce-lb-controller/main.go` — flags, Scaleway client checks,
+  metrics/healthz server (started before and regardless of leader election),
+  leader election.
+- `l2lb/` — everything else, one package: `controller.go` (informers, queue,
+  opt-in logic), `reconcile.go` (`syncService`, the ordered idempotent steps),
+  `scaleway.go` (IPAM/Instance API use), `pool.go` (CiliumLoadBalancerIPPool),
+  `patcher.go` (strategic-merge Service patches), `logger.go` (SDK→klog
+  bridge), `metrics.go`, `version.go` (ldflags).
+- `charts/scw-l2announce-lb-controller/` — generic Helm chart (see below).
+- Tests: fakes in `l2lb/fakes_test.go` (in-memory Scaleway APIs recording
+  calls) + k8s fake clientsets; assertions center on **which mutations
+  happened** (`fakeIPAM.mutations()`).
+
+## Design decisions — do not regress
+
+- **Leader election stays.** Run ≥2 replicas spread across nodes. The failure
+  it covers is correlated: the dying node may be both lease holder and
+  controller host. A DaemonSet was rejected: failover is bounded by lease
+  timings (15s), extra standbys only add cluster-wide watch load.
+- **Nodes are fetched on demand** (`Nodes().Get` per reconcile), not cached in
+  an informer — reconciles are rare. RBAC for nodes is `get` only.
+- **Single reconcile worker** serializes all Scaleway mutations.
+- **Never silently re-book** an IP whose ID is in the
+  `k8s.iliad.it/scw-ipam-ip-id` annotation — it may be user-provided. Crash
+  recovery between BookIP and the annotation patch uses adoption by the
+  `service-uid=` tag.
+- **Only release IPs tagged `managed-by=scw-l2announce-lb-controller`**;
+  user-provided IPs are detached, never released. Never steal an IP attached
+  to a non-custom resource.
+- **Mutate Scaleway only on an actual difference** (drives the
+  `scw_l2lb_divergence` metric, which is the alerting signal).
+- Cilium pools are managed **unstructured via the dynamic client** — do not
+  import Cilium's Go module.
+- Use non-deprecated client-go APIs: typed workqueue
+  (`TypedRateLimitingInterface[string]`), `cache.NewInformerWithOptions`.
+- Lease names are matched by computing `leaseNameFor(svc)`, never by parsing
+  the lease name (namespace and name may both contain hyphens).
+
+## Build / test
+
+```sh
+make test      # go test -race, fake-based; always run after changes
+make compile   # binary; also run gofmt -l . and go vet ./...
+```
+
+Known macOS quirks (pre-existing, harmless): `BUILD_DATE ?= $(shell date -Is)`
+fails on BSD date; version stamps read `git rev-parse HEAD`.
+
+## Helm chart rules
+
+- `values.schema.json` is strict and follows the Iliad schema conventions:
+  draft-07, a `definitions` block of **CamelCase-named defs** referenced via
+  `$ref` (no inline nested objects unless tiny and not reused),
+  `additionalProperties: false` everywhere except Kubernetes passthrough
+  shapes (selectors, affinity, tolerations, securityContexts) and string
+  maps, `description` on every property, loose top-level `global`.
+  Keep values.yaml, the schema, and the chart README in sync.
+- **`leaderElect` is not a value**: derived everywhere as
+  `gt (int .Values.replicaCount) 1` (flag, election Role, NOTES).
+- Every template body starts with a `---` document marker **inside** its
+  `{{- if }}` gate.
+- The chart also bootstraps Cilium L2 announcement for stock Kapsule
+  (`CiliumL2AnnouncementPolicy` on `^ens[0-9]+$`, `cilium.io/v2
+  CiliumNodeConfig` setting `enable-l2-announcements`, and the
+  `cilium-l2announce-leases` Role/RoleBinding for SA `cilium`) — gated by
+  `cilium.l2AnnouncementPolicy.enabled` / `cilium.kapsuleBootstrap.enabled`,
+  both default true. Agents read the CiliumNodeConfig only at pod start
+  (NOTES.txt tells users to restart the cilium DaemonSet once).
+
+Validate chart changes:
+
+```sh
+helm lint charts/scw-l2announce-lb-controller
+helm template t charts/scw-l2announce-lb-controller \
+  --set pnID=pn-x --set scaleway.existingSecret=s        # must render
+helm template t charts/scw-l2announce-lb-controller      # must fail (required values)
+helm template t charts/scw-l2announce-lb-controller \
+  --set pnID=pn-x --set scaleway.existingSecret=s \
+  --set typoKey=1                                        # must fail (strict schema)
+```
