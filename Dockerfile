@@ -17,7 +17,11 @@ ARG COMMIT_SHA
 ARG BUILD_DATE
 ARG TARGETOS
 ARG TARGETARCH
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags "-w -s -X github.com/iliaditalia/scw-l2announce-lb-controller/l2lb.version=${TAG} -X github.com/iliaditalia/scw-l2announce-lb-controller/l2lb.buildDate=${BUILD_DATE} -X github.com/iliaditalia/scw-l2announce-lb-controller/l2lb.gitCommit=${COMMIT_SHA} " -o scw-l2announce-lb-controller ./cmd/scw-l2announce-lb-controller
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build \
+      -ldflags "-w -s -X github.com/iliaditalia/scw-l2announce-lb-controller/l2lb.version=${TAG} -X github.com/iliaditalia/scw-l2announce-lb-controller/l2lb.buildDate=${BUILD_DATE} -X github.com/iliaditalia/scw-l2announce-lb-controller/l2lb.gitCommit=${COMMIT_SHA} " \
+      -o scw-l2announce-lb-controller \
+      ./cmd/scw-l2announce-lb-controller
 
 FROM scratch
 WORKDIR /
