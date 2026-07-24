@@ -44,6 +44,17 @@ helm install l2lb oci://ghcr.io/iliaditalia/charts/scw-l2announce-lb-controller 
   --set scaleway.pnID=<private-network-uuid>
 ```
 
+To use the chart as a dependency instead, note that `repository` is the
+**parent path** — Helm appends the dependency `name` to it (GHCR answers
+"denied" rather than "not found" if the chart name ends up doubled):
+
+```yaml
+dependencies:
+  - name: scw-l2announce-lb-controller
+    version: 0.1.0
+    repository: oci://ghcr.io/iliaditalia/charts
+```
+
 For development, install from the repo checkout instead:
 
 ```sh
