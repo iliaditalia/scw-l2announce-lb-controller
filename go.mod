@@ -1,4 +1,4 @@
-module gitlab.local.iliad.it/devops/tools/scw-l2announce-lb-controller
+module github.com/iliaditalia/scw-l2announce-lb-controller
 
 go 1.26.2
 

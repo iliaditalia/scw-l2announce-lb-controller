@@ -38,7 +38,7 @@ import (
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/klog/v2"
 
-	"gitlab.local.iliad.it/devops/tools/scw-l2announce-lb-controller/l2lb"
+	"github.com/iliaditalia/scw-l2announce-lb-controller/l2lb"
 )
 
 func main() {

@@ -12,9 +12,9 @@ TAG ?= $(SHA)
 IMAGE_TAG ?= $(SHA)
 COMMIT_SHA ?= $(SHA)
 
-LDFLAGS := -X gitlab.local.iliad.it/devops/tools/scw-l2announce-lb-controller/l2lb.version=$(TAG) \
-           -X gitlab.local.iliad.it/devops/tools/scw-l2announce-lb-controller/l2lb.gitCommit=$(COMMIT_SHA) \
-           -X gitlab.local.iliad.it/devops/tools/scw-l2announce-lb-controller/l2lb.buildDate=$(BUILD_DATE)
+LDFLAGS := -X github.com/iliaditalia/scw-l2announce-lb-controller/l2lb.version=$(TAG) \
+           -X github.com/iliaditalia/scw-l2announce-lb-controller/l2lb.gitCommit=$(COMMIT_SHA) \
+           -X github.com/iliaditalia/scw-l2announce-lb-controller/l2lb.buildDate=$(BUILD_DATE)
 
 .PHONY: default
 default: test compile
