@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Go tests
+        run: make test
+      - name: gofmt
+        run: test -z "$(gofmt -l .)"
+      - name: go vet
+        run: go vet ./...
+      - name: Helm lint
+        run: helm lint charts/scw-l2announce-lb-controller
+      - name: Chart renders with minimal values
+        run: >-
+          helm template t charts/scw-l2announce-lb-controller
+          --set scaleway.pnID=pn-x --set scaleway.existingSecret=s > /dev/null
+      - name: Chart fails without required values
+        run: >-
+          ! helm template t charts/scw-l2announce-lb-controller > /dev/null 2>&1
+      - name: Chart schema rejects unknown keys
+        run: >-
+          ! helm template t charts/scw-l2announce-lb-controller
+          --set scaleway.pnID=pn-x --set scaleway.existingSecret=s
+          --set typoKey=1 > /dev/null 2>&1
+
+  image:
+    if: github.event_name == 'push'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha,format=long,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+      - name: Build args
+        id: args
+        run: |
+          echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            TAG=${{ steps.args.outputs.tag }}
+            COMMIT_SHA=${{ github.sha }}
+            BUILD_DATE=${{ steps.args.outputs.build_date }}
+
+  chart:
+    if: github.ref_type == 'tag'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package and push chart
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          helm package charts/scw-l2announce-lb-controller \
+            --version "$VERSION" --app-version "$VERSION"
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+            helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          helm push "scw-l2announce-lb-controller-${VERSION}.tgz" \
+            "oci://ghcr.io/${{ github.repository_owner }}/charts"
