@@ -92,7 +92,9 @@ jobs:
 
   chart:
     if: github.ref_type == 'tag'
-    needs: test
+    # The published chart's default image.tag points at this release's image,
+    # so the image must exist first.
+    needs: image
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
