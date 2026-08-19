@@ -32,7 +32,10 @@ Per opted-in Service, the reconcile loop:
    private network and persists its ID back to that annotation).
 2. Publishes that IP in the Service's `spec.externalIPs`, which Cilium's L2
    announcer picks up directly (the announcement policy must announce
-   `externalIPs`). Cilium LB-IPAM pools are deliberately **not** used: LB-IPAM
+   `externalIPs`), and mirrors it into `status.loadBalancer.ingress` — nothing
+   else populates it here, and consumers like ArgoCD health checks (and
+   `kubectl get svc`) treat a LoadBalancer Service as pending until it is set.
+   Cilium LB-IPAM pools are deliberately **not** used: LB-IPAM
    runs in the cilium-operator and only serves
    `loadBalancerClass: io.cilium/l2-announcer` when the *operator* has
    `enable-l2-announcements` — on Kapsule that flag can only be delivered to
@@ -47,7 +50,8 @@ Per opted-in Service, the reconcile loop:
    differs; a periodic resync (default 10m) corrects drift.
 5. On Service deletion or opt-out (guarded by the
    `k8s.iliad.it/scw-ipam-cleanup` finalizer): withdraws the IP from
-   `spec.externalIPs`, **releases** the IPAM IP if the controller booked it
+   `spec.externalIPs` and `status.loadBalancer.ingress`, **releases** the
+   IPAM IP if the controller booked it
    (recognized by the
    `managed-by=scw-l2announce-lb-controller` tag), or merely **detaches**
    user-provided IPs. Setting `k8s.iliad.it/scw-ipam-ip-externally-managed: "true"`
@@ -139,6 +143,9 @@ The controller needs (cluster-wide unless noted):
 - apiGroups: [""]
   resources: [services]
   verbs: [get, list, watch, patch]
+- apiGroups: [""]
+  resources: [services/status]
+  verbs: [patch]
 - apiGroups: [""]
   resources: [nodes]
   verbs: [get]

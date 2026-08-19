@@ -30,9 +30,10 @@ import (
 )
 
 // patchService applies mutate to a deep copy of svc and sends the resulting
-// two-way strategic merge patch. No-op if mutate changes nothing.
+// two-way strategic merge patch. No-op if mutate changes nothing. Pass
+// "status" as subresource when mutate touches svc.Status.
 // Adapted from the Scaleway cloud-controller-manager (scaleway/patcher.go).
-func patchService(ctx context.Context, kclient clientset.Interface, svc *v1.Service, mutate func(*v1.Service)) error {
+func patchService(ctx context.Context, kclient clientset.Interface, svc *v1.Service, mutate func(*v1.Service), subresources ...string) error {
 	final := svc.DeepCopy()
 	mutate(final)
 
@@ -53,7 +54,7 @@ func patchService(ctx context.Context, kclient clientset.Interface, svc *v1.Serv
 		return nil
 	}
 
-	_, err = kclient.CoreV1().Services(svc.Namespace).Patch(ctx, svc.Name, types.StrategicMergePatchType, patch, metav1.PatchOptions{})
+	_, err = kclient.CoreV1().Services(svc.Namespace).Patch(ctx, svc.Name, types.StrategicMergePatchType, patch, metav1.PatchOptions{}, subresources...)
 	if err != nil {
 		return fmt.Errorf("failed to patch service %s/%s: %w", svc.Namespace, svc.Name, err)
 	}

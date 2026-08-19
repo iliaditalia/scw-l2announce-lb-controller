@@ -119,6 +119,16 @@ func (c *Controller) syncService(key string) (err error) {
 			return err
 		}
 	}
+	// Mirror the VIP into status.loadBalancer.ingress: nothing else populates
+	// it (no cloud LB, no LB-IPAM), and tools like ArgoCD report a
+	// LoadBalancer Service as Progressing until it is non-empty.
+	if len(svc.Status.LoadBalancer.Ingress) != 1 || svc.Status.LoadBalancer.Ingress[0].IP != addr {
+		if err := patchService(ctx, c.clientSet, svc, func(s *v1.Service) {
+			s.Status.LoadBalancer.Ingress = []v1.LoadBalancerIngress{{IP: addr}}
+		}, "status"); err != nil {
+			return err
+		}
+	}
 
 	// 3. L2-announcement lease. Absent or holderless: the VIP is not (yet)
 	// announced — leave the current attachment alone, the lease event will
@@ -164,6 +174,14 @@ func (c *Controller) syncService(key string) (err error) {
 // IPAM IP, then drop the finalizer. On opt-out the controller's
 // annotations/labels are stripped too.
 func (c *Controller) cleanupService(ctx context.Context, svc *v1.Service) error {
+	// The LB ingress status is entirely controller-owned; clear it on opt-out.
+	if svc.DeletionTimestamp == nil && len(svc.Status.LoadBalancer.Ingress) > 0 {
+		if err := patchService(ctx, c.clientSet, svc, func(s *v1.Service) {
+			s.Status.LoadBalancer.Ingress = nil
+		}, "status"); err != nil {
+			return err
+		}
+	}
 	external := svc.Annotations[annotationIPExternallyManaged] == "true"
 	if ipID := svc.Annotations[annotationIPID]; ipID != "" {
 		ip, err := c.ipamAPI.GetIP(&ipam.GetIPRequest{IPID: ipID})

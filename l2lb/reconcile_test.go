@@ -134,6 +134,11 @@ func withDeletion(svc *v1.Service) { now := metav1.Now(); svc.DeletionTimestamp 
 func withExternalIPs(ips ...string) func(*v1.Service) {
 	return func(s *v1.Service) { s.Spec.ExternalIPs = ips }
 }
+func withStatusIngress(ip string) func(*v1.Service) {
+	return func(s *v1.Service) {
+		s.Status.LoadBalancer.Ingress = []v1.LoadBalancerIngress{{IP: ip}}
+	}
+}
 func withExternal(svc *v1.Service) { svc.Annotations[annotationIPExternallyManaged] = "true" }
 func withoutOptIn(svc *v1.Service) { delete(svc.Annotations, annotationEnabled) }
 
@@ -185,6 +190,9 @@ func TestFreshOptIn(t *testing.T) {
 	}
 	if got := svc.Spec.ExternalIPs; !reflect.DeepEqual(got, []string{"172.30.192.10"}) {
 		t.Errorf("externalIPs = %v, want [172.30.192.10]", got)
+	}
+	if got := svc.Status.LoadBalancer.Ingress; !reflect.DeepEqual(got, []v1.LoadBalancerIngress{{IP: "172.30.192.10"}}) {
+		t.Errorf("status ingress = %v, want [{172.30.192.10}]", got)
 	}
 	booked := f.ipam.ips["ip-1"]
 	if !slices.Contains(booked.Tags, managedByTag) || !slices.Contains(booked.Tags, serviceUIDTagPrefix+testUID) {
@@ -244,7 +252,7 @@ func TestMoveOnHolderChange(t *testing.T) {
 
 func TestNoopWhenAttachmentCorrect(t *testing.T) {
 	f := newFixture(t,
-		testService(withFinalizer, withIPID("ip-a"), withExternalIPs("172.30.192.10")),
+		testService(withFinalizer, withIPID("ip-a"), withExternalIPs("172.30.192.10"), withStatusIngress("172.30.192.10")),
 		testNode("node-1", "srv-1"),
 		testLease("node-1"),
 	)
@@ -453,6 +461,7 @@ func TestOptOutKeepsExternalAnnotations(t *testing.T) {
 func TestOptOutCleansUp(t *testing.T) {
 	f := newFixture(t, testService(withoutOptIn, withFinalizer, withIPID("ip-a"),
 		withExternalIPs("192.0.2.1", "172.30.192.10"), // 192.0.2.1 is the user's own
+		withStatusIngress("172.30.192.10"),
 		func(s *v1.Service) {
 			s.Labels = map[string]string{legacyPoolLabelKey: testUID}
 		}))
@@ -477,6 +486,9 @@ func TestOptOutCleansUp(t *testing.T) {
 	}
 	if got := svc.Spec.ExternalIPs; !reflect.DeepEqual(got, []string{"192.0.2.1"}) {
 		t.Errorf("externalIPs = %v, want the user's own [192.0.2.1]", got)
+	}
+	if got := svc.Status.LoadBalancer.Ingress; len(got) != 0 {
+		t.Errorf("status ingress not cleared on opt-out: %v", got)
 	}
 }
 

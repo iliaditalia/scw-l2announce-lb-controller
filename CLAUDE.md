@@ -52,7 +52,10 @@ must stay in sync with.
   Scaleway-managed). The agent-side L2 announcer picks externalIPs up
   directly (chart policy sets `externalIPs: true`). Only the controller-added
   entry is managed; user entries in `externalIPs` are preserved. The
-  `ipam.k8s.iliad.it/pool` label is legacy — stripped, never written.
+  `ipam.k8s.iliad.it/pool` label is legacy — stripped, never written. The
+  controller also mirrors the VIP into `status.loadBalancer.ingress`
+  (subresource patch, `services/status` RBAC) — nothing else populates it,
+  and ArgoCD reports LoadBalancer Services as Progressing until it is set.
 - Use non-deprecated client-go APIs: typed workqueue
   (`TypedRateLimitingInterface[string]`), `cache.NewInformerWithOptions`.
 - Lease names are matched by computing `leaseNameFor(svc)`, never by parsing
