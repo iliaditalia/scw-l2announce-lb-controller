@@ -31,7 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/dynamic"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -75,10 +74,9 @@ const (
 )
 
 // Controller watches LoadBalancer Services opted in via annotation and
-// reconciles their Scaleway IPAM IP, Cilium LB IP pool and MAC attachment.
+// reconciles their Scaleway IPAM IP, externalIPs VIP and MAC attachment.
 type Controller struct {
 	clientSet   clientset.Interface
-	dynClient   dynamic.Interface
 	ipamAPI     IPAMAPI
 	instanceAPI InstanceAPI
 	recorder    record.EventRecorder
@@ -93,13 +91,12 @@ type Controller struct {
 
 // New builds a Controller. pnID is the default Scaleway private network the
 // VIPs are reserved from; resyncPeriod is the full drift-resync interval.
-func New(clientSet clientset.Interface, dynClient dynamic.Interface, ipamAPI IPAMAPI, instanceAPI InstanceAPI, pnID string, resyncPeriod time.Duration) *Controller {
+func New(clientSet clientset.Interface, ipamAPI IPAMAPI, instanceAPI InstanceAPI, pnID string, resyncPeriod time.Duration) *Controller {
 	broadcaster := record.NewBroadcaster()
 	broadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
 
 	c := &Controller{
 		clientSet:   clientSet,
-		dynClient:   dynClient,
 		ipamAPI:     ipamAPI,
 		instanceAPI: instanceAPI,
 		recorder:    broadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: componentName}),

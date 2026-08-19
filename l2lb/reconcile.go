@@ -21,14 +21,19 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/scaleway/scaleway-sdk-go/api/ipam/v1"
 	coordinationv1 "k8s.io/api/coordination/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
 )
 
+// legacyPoolLabelKey was stamped on Services by pre-externalIPs versions to
+// select their CiliumLoadBalancerIPPool; it is only stripped now.
+const legacyPoolLabelKey = "ipam.k8s.iliad.it/pool"
+
 // syncService reconciles one Service by "namespace/name" key:
-// finalizer → IPAM IP → Cilium pool → lease holder → node MAC → attachment.
+// finalizer → IPAM IP → externalIPs → lease holder → node MAC → attachment.
 // Every step is idempotent; Scaleway is only mutated on an actual difference.
 func (c *Controller) syncService(key string) (err error) {
 	defer func() {
@@ -97,19 +102,22 @@ func (c *Controller) syncService(key string) (err error) {
 			"Reserved Scaleway IPAM IP %s (%s) on private network %s", ip.Address.IP, ip.ID, pnID)
 	}
 
-	// 2. Selector label + Cilium pool assigning the /32 to this service.
-	if svc.Labels[poolLabelKey] != string(svc.UID) {
+	// 2. Publish the VIP in spec.externalIPs, which Cilium's L2 announcer
+	// picks up directly. LB-IPAM pools are not used: on Kapsule the
+	// cilium-operator runs without enable-l2-announcements (the CiliumNodeConfig
+	// only reaches the agents) and its LB-IPAM ignores this loadBalancerClass.
+	addr := ip.Address.IP.String()
+	_, hasLegacyLabel := svc.Labels[legacyPoolLabelKey]
+	if !slices.Contains(svc.Spec.ExternalIPs, addr) || hasLegacyLabel {
 		if err := patchService(ctx, c.clientSet, svc, func(s *v1.Service) {
-			if s.Labels == nil {
-				s.Labels = map[string]string{}
+			if !slices.Contains(s.Spec.ExternalIPs, addr) {
+				s.Spec.ExternalIPs = append(s.Spec.ExternalIPs, addr)
+				klog.Infof("service %s: published VIP %s in spec.externalIPs", key, addr)
 			}
-			s.Labels[poolLabelKey] = string(svc.UID)
+			delete(s.Labels, legacyPoolLabelKey)
 		}); err != nil {
 			return err
 		}
-	}
-	if err := c.ensurePool(ctx, svc, ip.Address.IP.String()+"/32"); err != nil {
-		return err
 	}
 
 	// 3. L2-announcement lease. Absent or holderless: the VIP is not (yet)
@@ -151,17 +159,33 @@ func (c *Controller) syncService(key string) (err error) {
 	return c.ensureAttachment(svc, ip, mac)
 }
 
-// cleanupService runs on deletion and on opt-out: delete the pool, release
-// (controller-booked) or detach (user-provided) the IPAM IP, then drop the
-// finalizer. On opt-out the controller's annotations/labels are stripped too.
+// cleanupService runs on deletion and on opt-out: withdraw the VIP from
+// spec.externalIPs, release (controller-booked) or detach (user-provided) the
+// IPAM IP, then drop the finalizer. On opt-out the controller's
+// annotations/labels are stripped too.
 func (c *Controller) cleanupService(ctx context.Context, svc *v1.Service) error {
-	if err := c.deletePool(ctx, svc); err != nil {
-		return err
-	}
 	external := svc.Annotations[annotationIPExternallyManaged] == "true"
 	if ipID := svc.Annotations[annotationIPID]; ipID != "" {
-		if err := c.releaseOrDetachIP(ipID, external); err != nil {
+		ip, err := c.ipamAPI.GetIP(&ipam.GetIPRequest{IPID: ipID})
+		switch {
+		case isNotFound(err):
+			klog.Infof("service %s/%s: IPAM IP %s already gone, cannot withdraw its address from externalIPs", svc.Namespace, svc.Name, ipID)
+		case err != nil:
 			return err
+		default:
+			// Withdraw the VIP before touching Scaleway: once a managed IP is
+			// released its address can no longer be resolved on a retry.
+			addr := ip.Address.IP.String()
+			if slices.Contains(svc.Spec.ExternalIPs, addr) && svc.DeletionTimestamp == nil {
+				if err := patchService(ctx, c.clientSet, svc, func(s *v1.Service) {
+					s.Spec.ExternalIPs = slices.DeleteFunc(s.Spec.ExternalIPs, func(a string) bool { return a == addr })
+				}); err != nil {
+					return err
+				}
+			}
+			if err := c.releaseOrDetachIP(ip, external); err != nil {
+				return err
+			}
 		}
 	}
 	metricDivergence.DeleteLabelValues(svc.Namespace, svc.Name)
@@ -172,7 +196,7 @@ func (c *Controller) cleanupService(ctx context.Context, svc *v1.Service) error 
 			if !external { // external IP IDs are user config, keep them
 				delete(s.Annotations, annotationIPID)
 			}
-			delete(s.Labels, poolLabelKey)
+			delete(s.Labels, legacyPoolLabelKey)
 		}
 	})
 }

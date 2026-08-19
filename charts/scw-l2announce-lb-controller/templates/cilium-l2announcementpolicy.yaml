@@ -18,6 +18,8 @@ spec:
   {{- end }}
   interfaces:
     {{- toYaml .Values.cilium.l2AnnouncementPolicy.interfaces | nindent 4 }}
-  externalIPs: false
+  # The controller publishes VIPs via spec.externalIPs (LB-IPAM is unusable on
+  # Kapsule: the managed cilium-operator runs without enable-l2-announcements).
+  externalIPs: true
   loadBalancerIPs: true
 {{- end }}

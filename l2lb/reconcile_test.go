@@ -28,13 +28,9 @@ import (
 	"github.com/scaleway/scaleway-sdk-go/scw"
 	coordinationv1 "k8s.io/api/coordination/v1"
 	v1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	dynamicfake "k8s.io/client-go/dynamic/fake"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
@@ -52,18 +48,15 @@ type fixture struct {
 	ipam *fakeIPAM
 	inst *fakeInstance
 	kube *k8sfake.Clientset
-	dyn  *dynamicfake.FakeDynamicClient
 }
 
 func newFixture(t *testing.T, objs ...runtime.Object) *fixture {
 	t.Helper()
 	kube := k8sfake.NewSimpleClientset(objs...)
-	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
-		map[schema.GroupVersionResource]string{poolGVR: "CiliumLoadBalancerIPPoolList"})
 	fIPAM := newFakeIPAM()
 	fInst := newFakeInstance()
 
-	c := New(kube, dyn, fIPAM, fInst, testPN, time.Minute)
+	c := New(kube, fIPAM, fInst, testPN, time.Minute)
 	c.recorder = record.NewFakeRecorder(100)
 
 	for _, o := range objs {
@@ -78,7 +71,7 @@ func newFixture(t *testing.T, objs ...runtime.Object) *fixture {
 			t.Fatal(err)
 		}
 	}
-	return &fixture{c: c, ipam: fIPAM, inst: fInst, kube: kube, dyn: dyn}
+	return &fixture{c: c, ipam: fIPAM, inst: fInst, kube: kube}
 }
 
 // sync runs syncService and refreshes the service indexer from the fake
@@ -138,6 +131,9 @@ func withIPID(id string) func(*v1.Service) {
 	return func(s *v1.Service) { s.Annotations[annotationIPID] = id }
 }
 func withDeletion(svc *v1.Service) { now := metav1.Now(); svc.DeletionTimestamp = &now }
+func withExternalIPs(ips ...string) func(*v1.Service) {
+	return func(s *v1.Service) { s.Spec.ExternalIPs = ips }
+}
 func withExternal(svc *v1.Service) { svc.Annotations[annotationIPExternallyManaged] = "true" }
 func withoutOptIn(svc *v1.Service) { delete(svc.Annotations, annotationEnabled) }
 
@@ -170,16 +166,6 @@ func (f *fixture) seededIP(id, addr, attachedMAC string, tags ...string) *ipam.I
 	return ip
 }
 
-func (f *fixture) getPool(t *testing.T) map[string]any {
-	t.Helper()
-	pool, err := f.dyn.Resource(poolGVR).Get(context.Background(), "scw-ipam-default-vip", metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("getting pool: %v", err)
-	}
-	spec, _, _ := unstructured.NestedMap(pool.Object, "spec")
-	return spec
-}
-
 func TestFreshOptIn(t *testing.T) {
 	f := newFixture(t, testService())
 
@@ -197,30 +183,26 @@ func TestFreshOptIn(t *testing.T) {
 	if !hasFinalizer(svc) {
 		t.Error("finalizer not added")
 	}
-	if svc.Labels[poolLabelKey] != testUID {
-		t.Errorf("pool label not stamped: %v", svc.Labels)
+	if got := svc.Spec.ExternalIPs; !reflect.DeepEqual(got, []string{"172.30.192.10"}) {
+		t.Errorf("externalIPs = %v, want [172.30.192.10]", got)
 	}
 	booked := f.ipam.ips["ip-1"]
 	if !slices.Contains(booked.Tags, managedByTag) || !slices.Contains(booked.Tags, serviceUIDTagPrefix+testUID) {
 		t.Errorf("booked IP missing ownership tags: %v", booked.Tags)
 	}
 
-	spec := f.getPool(t)
-	blocks := spec["blocks"].([]any)
-	if cidr := blocks[0].(map[string]any)["cidr"]; cidr != "172.30.192.10/32" {
-		t.Errorf("pool cidr = %v, want 172.30.192.10/32", cidr)
-	}
-	selector := spec["serviceSelector"].(map[string]any)["matchLabels"].(map[string]any)
-	if selector[poolLabelKey] != testUID {
-		t.Errorf("pool selector = %v", selector)
-	}
-
-	// Second pass with no lease: steady state, zero new mutations.
+	// Second pass with no lease: steady state, zero new mutations, no patches.
+	actionsBefore := len(f.kube.Actions())
 	if err := f.sync(t, "default/vip"); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.ipam.mutations(); !reflect.DeepEqual(got, []string{"BookIP"}) {
 		t.Fatalf("second sync mutated: %v", got)
+	}
+	for _, a := range f.kube.Actions()[actionsBefore:] {
+		if a.GetVerb() == "patch" {
+			t.Fatalf("second sync patched the service: %v", a)
+		}
 	}
 }
 
@@ -262,9 +244,7 @@ func TestMoveOnHolderChange(t *testing.T) {
 
 func TestNoopWhenAttachmentCorrect(t *testing.T) {
 	f := newFixture(t,
-		testService(withFinalizer, withIPID("ip-a"), func(s *v1.Service) {
-			s.Labels = map[string]string{poolLabelKey: testUID}
-		}),
+		testService(withFinalizer, withIPID("ip-a"), withExternalIPs("172.30.192.10")),
 		testNode("node-1", "srv-1"),
 		testLease("node-1"),
 	)
@@ -378,12 +358,8 @@ func TestRefusesToStealForeignAttachment(t *testing.T) {
 }
 
 func TestDeletionReleasesManagedIP(t *testing.T) {
-	f := newFixture(t, testService(withFinalizer, withIPID("ip-a"), withDeletion))
+	f := newFixture(t, testService(withFinalizer, withIPID("ip-a"), withDeletion, withExternalIPs("172.30.192.10")))
 	f.seededIP("ip-a", "172.30.192.10", macNode1, managedByTag)
-	// Pre-create the pool so deletion is observable.
-	if err := f.c.ensurePool(context.Background(), testService(), "172.30.192.10/32"); err != nil {
-		t.Fatal(err)
-	}
 
 	if err := f.c.syncService("default/vip"); err != nil {
 		t.Fatal(err)
@@ -391,9 +367,6 @@ func TestDeletionReleasesManagedIP(t *testing.T) {
 	want := []string{"DetachIP:" + macNode1, "ReleaseIP"}
 	if got := f.ipam.mutations(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("expected %v, got %v", want, got)
-	}
-	if _, err := f.dyn.Resource(poolGVR).Get(context.Background(), "scw-ipam-default-vip", metav1.GetOptions{}); !apierrors.IsNotFound(err) {
-		t.Errorf("pool not deleted: %v", err)
 	}
 	svc := f.service(t)
 	if hasFinalizer(svc) {
@@ -478,9 +451,11 @@ func TestOptOutKeepsExternalAnnotations(t *testing.T) {
 }
 
 func TestOptOutCleansUp(t *testing.T) {
-	f := newFixture(t, testService(withoutOptIn, withFinalizer, withIPID("ip-a"), func(s *v1.Service) {
-		s.Labels = map[string]string{poolLabelKey: testUID}
-	}))
+	f := newFixture(t, testService(withoutOptIn, withFinalizer, withIPID("ip-a"),
+		withExternalIPs("192.0.2.1", "172.30.192.10"), // 192.0.2.1 is the user's own
+		func(s *v1.Service) {
+			s.Labels = map[string]string{legacyPoolLabelKey: testUID}
+		}))
 	f.seededIP("ip-a", "172.30.192.10", macNode1, managedByTag)
 
 	if err := f.sync(t, "default/vip"); err != nil {
@@ -497,8 +472,43 @@ func TestOptOutCleansUp(t *testing.T) {
 	if _, ok := svc.Annotations[annotationIPID]; ok {
 		t.Error("IP ID annotation not stripped on opt-out")
 	}
-	if _, ok := svc.Labels[poolLabelKey]; ok {
-		t.Error("pool label not stripped on opt-out")
+	if _, ok := svc.Labels[legacyPoolLabelKey]; ok {
+		t.Error("legacy pool label not stripped on opt-out")
+	}
+	if got := svc.Spec.ExternalIPs; !reflect.DeepEqual(got, []string{"192.0.2.1"}) {
+		t.Errorf("externalIPs = %v, want the user's own [192.0.2.1]", got)
+	}
+}
+
+func TestUserExternalIPsPreserved(t *testing.T) {
+	f := newFixture(t, testService(withFinalizer, withIPID("ip-a"), withExternalIPs("192.0.2.1")))
+	f.seededIP("ip-a", "172.30.192.10", "", managedByTag)
+
+	if err := f.sync(t, "default/vip"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"192.0.2.1", "172.30.192.10"}
+	if got := f.service(t).Spec.ExternalIPs; !reflect.DeepEqual(got, want) {
+		t.Errorf("externalIPs = %v, want %v", got, want)
+	}
+}
+
+func TestLegacyPoolLabelStripped(t *testing.T) {
+	// Upgrade path: pre-externalIPs versions stamped a pool-selector label.
+	f := newFixture(t, testService(withFinalizer, withIPID("ip-a"), func(s *v1.Service) {
+		s.Labels = map[string]string{legacyPoolLabelKey: testUID}
+	}))
+	f.seededIP("ip-a", "172.30.192.10", "", managedByTag)
+
+	if err := f.sync(t, "default/vip"); err != nil {
+		t.Fatal(err)
+	}
+	svc := f.service(t)
+	if _, ok := svc.Labels[legacyPoolLabelKey]; ok {
+		t.Errorf("legacy pool label not stripped: %v", svc.Labels)
+	}
+	if !slices.Contains(svc.Spec.ExternalIPs, "172.30.192.10") {
+		t.Errorf("externalIPs = %v, want it to contain 172.30.192.10", svc.Spec.ExternalIPs)
 	}
 }
 

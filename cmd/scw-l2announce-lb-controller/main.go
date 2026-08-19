@@ -31,7 +31,6 @@ import (
 	"github.com/scaleway/scaleway-sdk-go/logger"
 	"github.com/scaleway/scaleway-sdk-go/scw"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/leaderelection"
@@ -89,9 +88,8 @@ func main() {
 		klog.Fatalf("could not build kubernetes client configuration: %v", err)
 	}
 	clientSet := kubernetes.NewForConfigOrDie(config)
-	dynClient := dynamic.NewForConfigOrDie(config)
 
-	controller := l2lb.New(clientSet, dynClient, ipam.NewAPI(scwClient), instance.NewAPI(scwClient), pnID, resyncPeriod)
+	controller := l2lb.New(clientSet, ipam.NewAPI(scwClient), instance.NewAPI(scwClient), pnID, resyncPeriod)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

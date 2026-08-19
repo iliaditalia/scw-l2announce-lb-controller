@@ -18,7 +18,7 @@ must stay in sync with.
   leader election.
 - `l2lb/` — everything else, one package: `controller.go` (informers, queue,
   opt-in logic), `reconcile.go` (`syncService`, the ordered idempotent steps),
-  `scaleway.go` (IPAM/Instance API use), `pool.go` (CiliumLoadBalancerIPPool),
+  `scaleway.go` (IPAM/Instance API use),
   `patcher.go` (strategic-merge Service patches), `logger.go` (SDK→klog
   bridge), `metrics.go`, `version.go` (ldflags).
 - `charts/scw-l2announce-lb-controller/` — generic Helm chart (see below).
@@ -44,8 +44,15 @@ must stay in sync with.
   to a non-custom resource.
 - **Mutate Scaleway only on an actual difference** (drives the
   `scw_l2lb_divergence` metric, which is the alerting signal).
-- Cilium pools are managed **unstructured via the dynamic client** — do not
-  import Cilium's Go module.
+- **VIPs are published via `spec.externalIPs`, never Cilium LB-IPAM pools**:
+  LB-IPAM runs in the cilium-operator and ignores
+  `loadBalancerClass: io.cilium/l2-announcer` unless the *operator* has
+  `enable-l2-announcements`, which on Kapsule is impossible (the
+  CiliumNodeConfig only reaches agents; the operator's ConfigMap is
+  Scaleway-managed). The agent-side L2 announcer picks externalIPs up
+  directly (chart policy sets `externalIPs: true`). Only the controller-added
+  entry is managed; user entries in `externalIPs` are preserved. The
+  `ipam.k8s.iliad.it/pool` label is legacy — stripped, never written.
 - Use non-deprecated client-go APIs: typed workqueue
   (`TypedRateLimitingInterface[string]`), `cache.NewInformerWithOptions`.
 - Lease names are matched by computing `leaseNameFor(svc)`, never by parsing

@@ -221,15 +221,7 @@ func (c *Controller) ensureAttachment(svc *v1core.Service, ip *ipam.IP, mac stri
 // controller-booked IPs (managed-by tag) are released; user-provided IPs are
 // only detached from their custom-resource MAC. external (the user-set
 // annotation) forces detach-only regardless of tags.
-func (c *Controller) releaseOrDetachIP(ipID string, external bool) error {
-	ip, err := c.ipamAPI.GetIP(&ipam.GetIPRequest{IPID: ipID})
-	if err != nil {
-		if isNotFound(err) {
-			return nil
-		}
-		return err
-	}
-
+func (c *Controller) releaseOrDetachIP(ip *ipam.IP, external bool) error {
 	if !external && slices.Contains(ip.Tags, managedByTag) {
 		// Scaleway refuses to release an IP still attached to a resource.
 		if err := c.detachCustom(ip); err != nil {

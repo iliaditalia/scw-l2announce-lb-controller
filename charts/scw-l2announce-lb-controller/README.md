@@ -13,7 +13,7 @@ announcements to work at all:
 - the lease Role/RoleBinding for the `cilium` ServiceAccount that the upstream
   Cilium chart would create with `l2announcements.enabled=true`.
 
-Requires Cilium ≥ 1.18 (`cilium.io/v2` IP pools).
+Requires Cilium ≥ 1.16 (`cilium.io/v2` CiliumNodeConfig).
 
 ## Install
 

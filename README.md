@@ -30,10 +30,15 @@ Per opted-in Service, the reconcile loop:
 1. Ensures an IPAM IP exists (uses the one from the
    `k8s.iliad.it/scw-ipam-ip-id` annotation, or books one on the configured
    private network and persists its ID back to that annotation).
-2. Ensures a `CiliumLoadBalancerIPPool` (cilium.io/v2) containing exactly that
-   IP as a `/32`, selecting exactly this Service via a
-   `ipam.k8s.iliad.it/pool: <service-UID>` label stamped on the Service —
-   Cilium then assigns the VIP.
+2. Publishes that IP in the Service's `spec.externalIPs`, which Cilium's L2
+   announcer picks up directly (the announcement policy must announce
+   `externalIPs`). Cilium LB-IPAM pools are deliberately **not** used: LB-IPAM
+   runs in the cilium-operator and only serves
+   `loadBalancerClass: io.cilium/l2-announcer` when the *operator* has
+   `enable-l2-announcements` — on Kapsule that flag can only be delivered to
+   the agents (via a CiliumNodeConfig), the operator's ConfigMap is
+   Scaleway-managed, so LB-IPAM ignores these Services entirely and a pool
+   never materializes an IP.
 3. Watches the Cilium lease `kube-system/cilium-l2announce-<ns>-<name>` and
    resolves the holder node → Scaleway server (via `spec.providerID`) → private
    NIC MAC on the target private network.
@@ -41,8 +46,9 @@ Per opted-in Service, the reconcile loop:
    the lease holder changes. Scaleway is only called when something actually
    differs; a periodic resync (default 10m) corrects drift.
 5. On Service deletion or opt-out (guarded by the
-   `k8s.iliad.it/scw-ipam-cleanup` finalizer): deletes the pool, **releases**
-   the IPAM IP if the controller booked it (recognized by the
+   `k8s.iliad.it/scw-ipam-cleanup` finalizer): withdraws the IP from
+   `spec.externalIPs`, **releases** the IPAM IP if the controller booked it
+   (recognized by the
    `managed-by=scw-l2announce-lb-controller` tag), or merely **detaches**
    user-provided IPs. Setting `k8s.iliad.it/scw-ipam-ip-externally-managed: "true"`
    forces detach-only regardless of tags.
@@ -71,12 +77,15 @@ spec:
   ...
 ```
 
-A `CiliumL2AnnouncementPolicy` matching the service must exist — the
-controller does not manage it, but the [Helm chart](charts/scw-l2announce-lb-controller)
-creates one by default. Only IPv4 is supported.
+A `CiliumL2AnnouncementPolicy` matching the service and announcing
+`externalIPs` must exist — the controller does not manage it, but the
+[Helm chart](charts/scw-l2announce-lb-controller) creates one by default. The
+cluster must not run the `DenyServiceExternalIPs` admission plugin (Kapsule
+does not). Only IPv4 is supported.
 
 Do not edit the `k8s.iliad.it/scw-ipam-ip-id` annotation or the
-`ipam.k8s.iliad.it/pool` label of a managed Service by hand. Note that opting
+controller-added `spec.externalIPs` entry of a managed Service by hand
+(your own additional `externalIPs` entries are left alone). Note that opting
 out strips both; if you supplied your own IP ID, re-add the annotation when
 re-opting in — or set `k8s.iliad.it/scw-ipam-ip-externally-managed: "true"`, which
 keeps the IP ID annotation across opt-out (and requires the IP ID to be set).
@@ -131,9 +140,6 @@ The controller needs (cluster-wide unless noted):
 - apiGroups: [coordination.k8s.io]
   resources: [leases]
   verbs: [get, list, watch]
-- apiGroups: [cilium.io]
-  resources: [ciliumloadbalancerippools]
-  verbs: [get, list, watch, create, update, delete]
 # Additionally, a namespaced Role in the controller's namespace (leader election):
 - apiGroups: [coordination.k8s.io]
   resources: [leases]
