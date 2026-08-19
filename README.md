@@ -53,6 +53,14 @@ Per opted-in Service, the reconcile loop:
    user-provided IPs. Setting `k8s.iliad.it/scw-ipam-ip-externally-managed: "true"`
    forces detach-only regardless of tags.
 
+> [!NOTE]
+> Service `spec.externalIPs` is deprecated in Kubernetes, so this is a
+> workaround, not the preferred design. Should Scaleway ever ship Kapsule with
+> `enable-l2-announcements` enabled in the cilium-operator's ConfigMap, switch
+> back to the LB-IPAM pool implementation preserved on the
+> [`cilium-ippool`](https://github.com/iliaditalia/scw-l2announce-lb-controller/tree/cilium-ippool)
+> branch.
+
 ## Usage
 
 Opt in a Service:
